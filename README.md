@@ -18,20 +18,34 @@ python main.py
 
 ## Input format
 
-Enter one account and device per line, separated by whitespace:
+Enter one account and device per line, separated by whitespace, or use comma-separated values in a CSV file:
 
 ```text
 account01 device01
 account02 device02
 ```
 
-Blank lines are ignored. Lines that do not contain exactly two values are reported as invalid, and duplicate device names are skipped.
+```csv
+account,device
+account01,device01
+account02,device02
+```
+
+Blank lines and the optional `account,device` CSV header are ignored. Lines that do not contain exactly two values or have an invalid Windows filename for the device are reported as invalid. Duplicate device names are skipped. If output files already exist, the app asks before replacing them; choosing **No** skips those files.
 
 ## Output
 
 By default, the app writes JSON files, a timestamped ZIP archive, and `generator.log` to a `JSON_Output` folder beside the app. When running `main.py`, this folder is beside the script; when running the EXE, it is beside the EXE. Extract the app ZIP to a folder where you have write permission.
 
 Use **Browse Folder** to choose a different output location. Use **Load File** to load a `.txt` or `.csv` text file containing the same two-column format.
+
+## Run tests
+
+From the project folder, run:
+
+```powershell
+python -m unittest discover -s tests
+```
 
 ## Build the Windows executable
 

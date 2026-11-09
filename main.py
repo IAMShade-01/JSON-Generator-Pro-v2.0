@@ -7,6 +7,7 @@ import zipfile
 import logging
 import getpass
 from datetime import datetime
+from generator_logic import is_valid_device_name, parse_input_line
 
 # =====================================================
 # APP INFO
@@ -193,15 +194,17 @@ def generate_json():
 
         return
 
-    timestamp = datetime.now().strftime(
-        "%Y%m%d_%H%M%S"
-    )
+    now = datetime.now()
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    zip_timestamp = now.strftime("%Y%m%d_%H%M%S_%f")
 
     generated_files = []
     devices_seen = set()
 
     invalid_lines = []
     duplicate_lines = []
+    skipped_existing = []
+    records = []
 
     preview_box.delete(
         "1.0",
@@ -226,26 +229,74 @@ def generate_json():
         if not line:
             continue
 
-        parts = line.split()
-
-        if len(parts) != 2:
-
+        try:
+            parsed_line = parse_input_line(line)
+        except ValueError:
             invalid_lines.append(
                 f"Line {line_num}: {line}"
             )
-
             continue
 
-        account = parts[0]
-        device = parts[1]
+        if parsed_line is None:
+            continue
 
-        if device in devices_seen:
+        account, device = parsed_line
+
+        if not is_valid_device_name(device):
+            invalid_lines.append(
+                f"Line {line_num}: invalid device filename: {device}"
+            )
+            continue
+
+        device_key = device.casefold()
+        if device_key in devices_seen:
 
             duplicate_lines.append(device)
 
             continue
 
-        devices_seen.add(device)
+        devices_seen.add(device_key)
+
+        filepath = os.path.abspath(
+            os.path.join(
+                output_folder,
+                f"{device}.json"
+            )
+        )
+        output_root = os.path.abspath(output_folder)
+
+        try:
+            if os.path.commonpath((output_root, filepath)) != output_root:
+                invalid_lines.append(
+                    f"Line {line_num}: device path is outside the output folder: {device}"
+                )
+                continue
+        except ValueError:
+            invalid_lines.append(
+                f"Line {line_num}: invalid device path: {device}"
+            )
+            continue
+
+        records.append((account, device, filepath))
+
+    existing_files = [
+        filepath
+        for _, _, filepath in records
+        if os.path.exists(filepath)
+    ]
+
+    overwrite_existing = False
+    if existing_files:
+        overwrite_existing = messagebox.askyesno(
+            "Files Already Exist",
+            f"{len(existing_files)} JSON file(s) already exist.\n\n"
+            "Overwrite them? Choose No to skip existing files."
+        )
+
+    for account, device, filepath in records:
+        if os.path.exists(filepath) and not overwrite_existing:
+            skipped_existing.append(device)
+            continue
 
         data = {
             "device": device,
@@ -257,16 +308,11 @@ def generate_json():
             "override_refresh_frequency": None
         }
 
-        filepath = os.path.join(
-            output_folder,
-            f"{device}.json"
-        )
-
         try:
 
             with open(
                 filepath,
-                "w",
+                "w" if overwrite_existing else "x",
                 encoding="utf-8"
             ) as file:
 
@@ -288,6 +334,9 @@ def generate_json():
                 ) + "\n\n"
             )
 
+        except FileExistsError:
+            skipped_existing.append(device)
+
         except Exception as e:
 
             invalid_lines.append(
@@ -296,7 +345,7 @@ def generate_json():
 
     zip_path = os.path.join(
         output_folder,
-        f"devices_{timestamp}.zip"
+        f"devices_{zip_timestamp}.zip"
     )
 
     try:
@@ -340,6 +389,12 @@ def generate_json():
             + "\n".join(duplicate_lines)
         )
 
+    if skipped_existing:
+        result_message += (
+            "\n\nExisting files skipped (not overwritten):\n"
+            + "\n".join(skipped_existing)
+        )
+
     if invalid_lines:
 
         result_message += (
@@ -353,7 +408,8 @@ def generate_json():
     )
 
     status_label.config(
-        text=f"Generated {len(generated_files)} JSON files"
+        text=f"Generated {len(generated_files)} JSON files; "
+             f"skipped {len(skipped_existing)} existing files"
     )
 
 # =====================================================
