@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+/build/
+/dist/*
+!/dist/JSON_Generator_Pro_Windows.zip
+/JSON_Output/
+*.spec
